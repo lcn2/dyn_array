@@ -1,0 +1,4 @@
+dyn_array.a
+dyn_array.o
+dyn_test
+dyn_test.o
