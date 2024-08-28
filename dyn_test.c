@@ -1,7 +1,7 @@
 /*
  * dyn_array_test - test the dynamic array facility
  *
- * Copyright (c) 2014,2015,2022-2023 by Landon Curt Noll.  All Rights Reserved.
+ * Copyright (c) 2014,2015,2022-2024 by Landon Curt Noll.  All Rights Reserved.
  *
  * Permission to use, copy, modify, and distribute this software and
  * its documentation for any purpose and without fee is hereby granted,
@@ -67,7 +67,7 @@ static const char * const usage_msg =
     "    1\ttest suite failed\n"
     "    2\t-h and help string printed or -V and version string printed\n"
     "    3\tcommand line error\n"
-    "    >=4\tinternal error\n"
+    " >=10\tinternal error\n"
     "\n"
     "dyn_array library version: %s\n"
     "dyn_test version: %s";
@@ -76,7 +76,9 @@ static const char * const usage_msg =
 /*
  * forward declarations
  */
-static int parse_verbosity(char const *program, char const *arg);
+#if !defined(DBG_USE)
+static int parse_verbosity(char const *optarg);
+#endif
 static void usage(int exitcode, char const *str, char const *prog) __attribute__((noreturn));
 
 int
@@ -103,7 +105,11 @@ main(int argc, char *argv[])
 	    /*
 	     * parse verbosity
 	     */
-	    verbosity_level = parse_verbosity(program, optarg);
+	    verbosity_level = parse_verbosity(optarg);
+	    if (verbosity_level < 0) {
+		usage(3, program, "invalid -v verbosity"); /*ooo*/
+		not_reached();
+	    }
 	    break;
 	case 'V':		/* -V - print version and exit */
 	    (void) printf("%s\n", DYN_TEST_VERSION);
@@ -212,38 +218,42 @@ main(int argc, char *argv[])
 }
 
 
+#if !defined(DBG_USE)
 /*
- * parse_verbosity - parse -v option for our tools
+ * parse_verbosity - parse -v optarg for our tools
  *
  * given:
- *	program		- the calling program e.g. txzchk, fnamchk, mkiocccentry etc.
- *	arg		- the optarg in the calling tool
+ *	optarg		verbosity string, must be an integer >= 0
  *
- * Returns the parsed verbosity.
- *
- * Returns DBG_NONE if passed NULL args or empty string.
+ * returns:
+ *	parsed verbosity or DBG_INVALID on conversion error
  */
-static int
-parse_verbosity(char const *program, char const *arg)
+int
+parse_verbosity(char const *optarg)
 {
-    int verbosity;
+    int verbosity = DBG_NONE;	/* parsed verbosity or DBG_NONE */
 
-    if (program == NULL || arg == NULL || !strlen(arg)) {
-	return DBG_NONE;
+    /*
+     * firewall
+     */
+    if (optarg == NULL) {
+	return DBG_INVALID;
     }
 
     /*
      * parse verbosity
      */
-    errno = 0;		/* pre-clear errno for errp() */
-    verbosity = (int)strtol(arg, NULL, 0);
+    errno = 0;		/* pre-clear errno for warnp() */
+    verbosity = (int)strtol(optarg, NULL, 0);
     if (errno != 0) {
-	errp(3, __func__, "%s: cannot parse -v arg: %s error: %s", program, arg, strerror(errno)); /*ooo*/
-	not_reached();
+	return DBG_INVALID;
     }
-
+    if (verbosity < 0) {
+	return DBG_INVALID;
+    }
     return verbosity;
 }
+#endif /* !defined(DBG_USE) */
 
 
 /*

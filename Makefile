@@ -2,7 +2,7 @@
 #
 # dyn_array - dynamic array facility
 #
-# Copyright (c) 2022-2023 by Landon Curt Noll.  All Rights Reserved.
+# Copyright (c) 2022-2024 by Landon Curt Noll.  All Rights Reserved.
 #
 # Permission to use, copy, modify, and distribute this software and
 # its documentation for any purpose and without fee is hereby granted,
@@ -43,7 +43,6 @@ CTAGS= ctags
 GREP= grep
 INDEPEND= independ
 INSTALL= install
-MAKE= make
 PICKY= picky
 RANLIB= ranlib
 RM= rm
@@ -130,23 +129,21 @@ MAKE_CD_Q= --no-print-directory
 
 # C source standards being used
 #
-# This repo supports c11 and later.
+# This repo supports c17 and later.
 #
-# NOTE: The use of -std=gnu11 is because there are a few older systems
-#       in late 2021 that do not have compilers that (yet) support gnu17.
-#       While there may be even more out of date systems that do not
-#       support gnu11, we have to draw the line somewhere.
+# NOTE: at one point we used -std=gnu11 because there were a few older systems
+#       in late 2021 that did not have compilers that (yet) supported gnu17.
+#       While there may be even more out of date systems that do not support
+#       gnu11, we have to draw the line somewhere. Besides, one of those systems
+#       reaches its EOL on 30 June 2024 and that's three days away at this
+#       point.
 #
-#       --------------------------------------------------
+#	--------------------------------------------------
 #
-#       ^^ the line is above :-)
+#	^^ the line is above :-)
 #
-# TODO - ############################################################################### - TODO #
-# TODO - Sometime in 2023 we will will support only c17 so C_STD will become -std=gnu17  - TODO #
-# TODO - ############################################################################### - TODO #
-#
-C_STD= -std=gnu11
-#C_STD= -std=gnu17
+#C_STD= -std=gnu11
+C_STD= -std=gnu17
 
 # optimization and debug level
 #
@@ -155,7 +152,7 @@ C_OPT= -O3 -g3
 
 # Compiler warnings
 #
-WARN_FLAGS= -pedantic -Wall -Wextra
+WARN_FLAGS= -pedantic -Wall -Wextra -Wno-char-subscripts
 #WARN_FLAGS= -pedantic -Wall -Wextra -Werror
 
 # linker options
@@ -353,10 +350,10 @@ dyn_array.a: ${LIB_OBJS}
 	${RANLIB} $@
 
 dyn_test.o: dyn_test.c dyn_array.h
-	${CC} ${CFLAGS} dyn_test.c -c
+	${CC} ${CFLAGS} -DDBG_USE dyn_test.c -c
 
 dyn_test: dyn_test.o dyn_array.a ../dbg/dbg.a
-	${CC} ${CFLAGS} dyn_test.o dyn_array.a ../dbg/dbg.a -o dyn_test
+	${CC} ${CFLAGS} -DDBG_USE dyn_test.o dyn_array.a ../dbg/dbg.a -o dyn_test
 
 
 #########################################################
@@ -451,7 +448,7 @@ picky: ${ALL_SRC}
 	    echo 1>&2; \
 	    echo 'See the following GitHub repo for ${PICKY}:'; 1>&2; \
 	    echo 1>&2; \
-	    echo '    https://github.com/xexyl/picky' 1>&2; \
+	    echo '    https://github.com/lcn2/picky' 1>&2; \
 	    echo 1>&2; \
 	    exit 1; \
 	else \

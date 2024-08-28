@@ -1,4 +1,9 @@
-dyn_array.a
-dyn_array.o
-dyn_test
-dyn_test.o
+*.[ao]
+*.dSYM/
+*~
+.*.swp
+.DS_Store
+/.local.dir.tags
+/Makefile.local
+/makefile.local
+/tags
