@@ -649,7 +649,7 @@ depend: ${ALL_CSRC}
 		exit 1; \
 	    fi; \
 	    ${SED} -i.orig -n -e '1,/^### DO NOT CHANGE MANUALLY BEYOND THIS LINE$$/p' Makefile; \
-	    ${CC} ${CFLAGS} -MM -I. -DMKIOCCCENTRY_USE ${ALL_CSRC} | ${INDEPEND} >> Makefile; \
+	    ${CC} ${CFLAGS} -MM -I. ${ALL_CSRC} | ${INDEPEND} >> Makefile; \
 	    if ${CMP} -s Makefile.orig Makefile; then \
 		${RM} -f Makefile.orig; \
 	    else \
@@ -662,5 +662,5 @@ depend: ${ALL_CSRC}
 	${S} echo "${OUR_NAME}: make $@ ending"
 
 ### DO NOT CHANGE MANUALLY BEYOND THIS LINE
-dyn_array.o: ../dbg/dbg.h dyn_array.c dyn_array.h
-dyn_test.o: ../dbg/dbg.h dyn_array.h dyn_test.c dyn_test.h
+dyn_array.o: /usr/local/include/dbg.h dyn_array.c dyn_array.h
+dyn_test.o: /usr/local/include/dbg.h dyn_array.h dyn_test.c dyn_test.h
