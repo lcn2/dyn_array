@@ -183,9 +183,13 @@ WARN_FLAGS= -pedantic -Wall -Wextra -Wno-char-subscripts
 #
 C_SPECIAL=
 
+# special linker flags
+#
+LD_SPECIAL=
+
 # linker options
 #
-LDFLAGS=
+LDFLAGS= ${LD_SPECIAL}
 
 # how to compile
 CFLAGS= ${C_STD} ${C_OPT} ${WARN_FLAGS} ${C_SPECIAL} ${LDFLAGS}
