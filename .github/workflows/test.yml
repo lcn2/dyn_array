@@ -1,0 +1,43 @@
+name: C CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: install ctags
+      run: sudo apt-get install -y universal-ctags
+    - name: install shellcheck
+      run: sudo apt-get install -y shellcheck
+    - name: clone seqcexit
+      run: git clone https://github.com/lcn2/seqcexit
+    - name: install seqcexit
+      run: cd seqcexit && sudo make install
+    - name: clone independ
+      run: git clone https://github.com/lcn2/independ
+    - name: install independ
+      run: cd independ && sudo make install
+    - name: clone checknr
+      run: git clone https://github.com/lcn2/checknr.git
+    - name: install checknr
+      run: cd checknr && sudo make install
+    - name: clone picky
+      run: git clone https://github.com/lcn2/picky
+    - name: install picky
+      run: cd picky && sudo make install
+    - name: make
+      run: make
+    - name: make test
+      run: make test
+    - name: make shellcheck
+      run: make shellcheck
+    - name: make seqcexit
+      run: make seqcexit
