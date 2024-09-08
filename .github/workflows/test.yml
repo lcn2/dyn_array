@@ -41,3 +41,5 @@ jobs:
       run: make picky
     - name: make check_man
       run: make check_man
+    - name: make depend
+      run: make depend
