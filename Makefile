@@ -649,9 +649,9 @@ uninstall:
 	${S} echo
 	${S} echo "${OUR_NAME}: make $@ starting"
 	${S} echo
-	${Q} ${RM} ${RM_V} -f ${RM_V} ${DEST_LIB}/libdyn_array.a
-	${Q} ${RM} ${RM_V} -f ${RM_V} ${DEST_LIB}/dyn_array.a
-	${Q} ${RM} ${RM_V} -f ${RM_V} ${DEST_DIR}/dyn_test
+	${Q} ${RM} -f ${RM_V} ${DEST_LIB}/libdyn_array.a
+	${Q} ${RM} -f ${RM_V} ${DEST_LIB}/dyn_array.a
+	${Q} ${RM} -f ${RM_V} ${DEST_DIR}/dyn_test
 	${Q} ${RM} -f ${RM_V} ${MAN3_DIR}/dyn_array.3
 	${Q} ${RM} -f ${RM_V} ${MAN3_DIR}/dyn_array_rewind.3
 	${Q} ${RM} -f ${RM_V} ${MAN3_DIR}/dyn_array_free.3
