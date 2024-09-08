@@ -591,7 +591,7 @@ legacy_clean:
 	${S} echo
 	${S} echo "${OUR_NAME}: make $@ starting"
 	${S} echo
-	${V} echo "${OUR_NAME}: nothing to do"
+	${S} echo "${OUR_NAME}: nothing to do"
 	${S} echo
 	${S} echo "${OUR_NAME}: make $@ ending"
 
