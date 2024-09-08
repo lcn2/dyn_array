@@ -611,7 +611,7 @@ legacy_clobber: legacy_clean
 configure:
 	@echo nothing to $@
 
-clean:
+clean: legacy_clean
 	${S} echo
 	${S} echo "${OUR_NAME}: make $@ starting"
 	${S} echo
