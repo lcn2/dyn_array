@@ -136,8 +136,8 @@ PREFIX= /usr/local
 # RM_V=					rm w/o -v flag (quiet mode)
 # RM_V= -v				rm with -v (debug / verbose mode)
 #
-#RM_V=
-RM_V= -v
+#RM_V= -v
+RM_V=
 
 
 # MAKE_CD_Q= --no-print-directory	silence make cd messages (quiet mode)
@@ -694,7 +694,7 @@ depend: ${ALL_CSRC}
 		${SED} -E -e 's;\s/usr/local/include/\S+;;g' -e 's;\s/usr/include/\S+;;g' | \
 		${INDEPEND} >> Makefile; \
 	    if ${CMP} -s Makefile.orig Makefile; then \
-		${Q} ${RM} ${RM_V} -f Makefile.orig; \
+		${RM} ${RM_V} -f Makefile.orig; \
 	    else \
 		echo "${OUR_NAME}: Makefile dependencies updated"; \
 		echo; \
