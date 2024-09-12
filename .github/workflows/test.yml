@@ -35,8 +35,8 @@ jobs:
       run: make all
     - name: make
       run: make
-    - name: make test
-      run: make test
+    - name: make VERBOSITY=7 test
+      run: make VERBOSITY=7  test
     - name: make picky
       run: make picky
     - name: make check_man
