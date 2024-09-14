@@ -1330,6 +1330,8 @@ parse_verbosity(char const *optarg)
     }
     return verbosity;
 }
+
+
 /*
  * check_invalid_option - check option error in getopt()
  *
