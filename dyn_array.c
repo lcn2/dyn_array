@@ -1399,7 +1399,7 @@ dyn_array_seek(struct dyn_array *array, off_t offset, int whence)
     if (dbg_allowed(DBG_V6_HIGH)) {
 	dbg(DBG_V6_HIGH, "in %s(array, %lld, %s): %s: allocated: %jd elements of size: %zu in use: %jd",
 		       __func__,
-		       offset,
+		       (long long int)offset,
 		       (whence == SEEK_SET ? "SEEK_SET" : (whence == SEEK_CUR ? "SEEK_CUR" : "SEEK_END")),
 		       (moved == true ? "moved" : "in-place"),
 		       dyn_array_alloced(array),
