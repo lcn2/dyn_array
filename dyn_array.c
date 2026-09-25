@@ -1469,12 +1469,12 @@ dyn_array_seek(struct dyn_array *array, off_t offset, int whence)
      */
     if (sizeof(off_t) > sizeof(intmax_t)) {
 	/*
-	 * When off_t is wider than intmax_t, avoid narrowing INTMAX_* into off_t.
-	 * Instead compare magnitudes in uintmax_t so we reject requests that cannot
-	 * be represented before casting offset down to intmax_t.
+	 * Only wider off_t types need an explicit range test.  In that case the
+	 * conversions below widen INTMAX_* into off_t, so the comparison stays in
+	 * the wider signed type and we can reject unrepresentable offsets before
+	 * narrowing them to intmax_t.
 	 */
-	if ((offset > 0 && (uintmax_t)offset > (uintmax_t)INTMAX_MAX) ||
-	    (offset < 0 && ((uintmax_t)(-(offset + 1)) + 1) > ((uintmax_t)INTMAX_MAX + 1U))) {
+	if (offset > (off_t)INTMAX_MAX || offset < (off_t)INTMAX_MIN) {
 	    err(173, __func__, "offset is outside the representable intmax_t range [%jd,%jd]",
 			      INTMAX_MIN, INTMAX_MAX);
 	    not_reached();
