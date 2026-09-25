@@ -124,6 +124,10 @@ static void usage(int exitcode, char const *str, char const *prog) __attribute__
 #  define DBG_DEFAULT (DBG_NONE)  /* default debugging level */
 #  endif
 
+#  if !defined(DBG_LOW)
+#  define DBG_LOW (1)		   /* minimal debugging */
+#  endif
+
 
 /*
  * not_reached
@@ -152,6 +156,8 @@ bool warn_output_allowed = true;	/* false ==> disable warning messages */
 bool err_output_allowed = true;		/* false ==> disable error messages */
 bool usage_output_allowed = true;	/* false ==> disable usage messages */
 bool msg_warn_silent = false;		/* true ==> silence info & warnings if verbosity_level <= 0 */
+bool error_or_ok = true;		/* true ==> output ERROR[code], false ==> output OK[code] */
+int ok_min_verbosity_level = DBG_LOW;	/* don't output OK unless verbosity_level >= ok_min_verbosity_level */
 
 /*
  * forward declarations
@@ -447,21 +453,27 @@ run_remaining_finding_regressions(void)
 static void
 test_create_elm_size_overflow(void)
 {
+    error_or_ok = false; /* output OK not ERROR when an error is discovered */
     (void) dyn_array_create((size_t)INTMAX_MAX + (size_t)1, 1, 1, false);
+    error_or_ok = true; /* output ERROR again when an error is discovered */
 }
 
 
 static void
 test_create_rounding_overflow(void)
 {
+    error_or_ok = false; /* output OK not ERROR when an error is discovered */
     (void) dyn_array_create(1, 4, INTMAX_MAX, false);
+    error_or_ok = true; /* output ERROR again when an error is discovered */
 }
 
 
 static void
 test_create_guard_chunk_overflow(void)
 {
+    error_or_ok = false; /* output OK not ERROR when an error is discovered */
     (void) dyn_array_create(1, 1, INTMAX_MAX, false);
+    error_or_ok = true; /* output ERROR again when an error is discovered */
 }
 
 
@@ -470,8 +482,10 @@ test_create_allocation_size_overflow(void)
 {
     intmax_t start_elm_count;
 
+    error_or_ok = false; /* output OK not ERROR when an error is discovered */
     start_elm_count = ((INTMAX_MAX / 3) * 2) + 2;
     (void) dyn_array_create(3, 1, start_elm_count, false);
+    error_or_ok = true; /* output ERROR again when an error is discovered */
 }
 
 
@@ -491,7 +505,9 @@ test_seek_cur_overflow(void)
 	errp(22, __func__, "malloc failed");
 	not_reached();
     }
+    error_or_ok = false; /* output OK not ERROR when an error is discovered */
     (void) dyn_array_seek(&array, 1, SEEK_CUR);
+    error_or_ok = true; /* output ERROR again when an error is discovered */
 }
 
 
@@ -511,7 +527,9 @@ test_seek_end_overflow(void)
 	errp(23, __func__, "malloc failed");
 	not_reached();
     }
+    error_or_ok = false; /* output OK not ERROR when an error is discovered */
     (void) dyn_array_seek(&array, 1, SEEK_END);
+    error_or_ok = true; /* output ERROR again when an error is discovered */
 }
 
 
@@ -522,10 +540,12 @@ test_macro_value_bounds(void)
     int value = 42;
     volatile int fetched;
 
+    error_or_ok = false; /* output OK not ERROR when an error is discovered */
     array = dyn_array_create(sizeof(int), 4, 4, true);
     (void) dyn_array_append_value(array, &value);
     fetched = dyn_array_value(array, int, 1);
     (void) fetched;
+    error_or_ok = true; /* output ERROR again when an error is discovered */
 }
 
 
@@ -1255,6 +1275,13 @@ ferr_write(FILE *stream, int error_code, char const *caller,
     }
 
     /*
+     * when in OK mode, don't output OK unless verbose enough
+     */
+    if (!error_or_ok && verbosity_level < ok_min_verbosity_level) {
+	return;
+    }
+
+    /*
      * save errno so we can restore it before returning
      */
     saved_errno = errno;
@@ -1263,7 +1290,7 @@ ferr_write(FILE *stream, int error_code, char const *caller,
      * write error diagnostic header to stream
      */
     errno = 0;		/* pre-clear errno for warnp() */
-    ret = fprintf(stream, "ERROR[%d]: %s: ", error_code, name);
+    ret = fprintf(stream, "%s[%d]: %s: ", (error_or_ok ? "ERROR" : "OK"), error_code, name);
     if (ret < 0) {
 	warnp(caller, "\nin %s(stream, %s, %d, %s, %s, ap): fprintf error\n",
 			       __func__, caller, error_code, name, fmt);
@@ -1354,6 +1381,13 @@ ferrp_write(FILE *stream, int error_code, char const *caller,
     }
 
     /*
+     * when in OK mode, don't output OK unless verbose enough
+     */
+    if (!error_or_ok && verbosity_level < ok_min_verbosity_level) {
+	return;
+    }
+
+    /*
      * save errno so we can restore it before returning
      */
     saved_errno = errno;
@@ -1362,7 +1396,7 @@ ferrp_write(FILE *stream, int error_code, char const *caller,
      * write error diagnostic warning header to stream
      */
     errno = 0;		/* pre-clear errno for warnp() */
-    ret = fprintf(stream, "ERROR[%d]: %s: ", error_code, name);
+    ret = fprintf(stream, "%s[%d]: %s: ", (error_or_ok ? "ERROR" : "OK"), error_code, name);
     if (ret < 0) {
 	warnp(caller, "\nin %s(stream, %s, %d, %s, %s, ap): fprintf #0 error\n",
 		      __func__, caller, error_code, name, fmt);
