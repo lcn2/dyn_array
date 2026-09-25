@@ -777,3 +777,4 @@ depend: ${ALL_CSRC}
 ### DO NOT CHANGE MANUALLY BEYOND THIS LINE
 dyn_array.o: dyn_array.c dyn_array.h
 dyn_test.o: dyn_array.h dyn_test.c dyn_test.h
+example.o: dyn_array.h example.c
