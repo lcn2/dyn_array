@@ -414,7 +414,8 @@ run_remaining_finding_regressions(void)
     }
     if (array == NULL || array->data != NULL || array->elm_size != 0 || array->count != 0 ||
 	array->allocated != 0 || array->chunk != 0 || array->zeroize != false) {
-	warn(__func__, "dyn_array_free() ownership regression: array=%p data=%p elm_size=%zu zeroize=%s count=%jd allocated=%jd chunk=%jd",
+	warn(__func__, "dyn_array_free() ownership regression: array=%p data=%p elm_size=%zu zeroize=%s "
+		       "count=%jd allocated=%jd chunk=%jd",
 		       (void *)array, (array == NULL ? NULL : array->data),
 		       (array == NULL ? 0U : array->elm_size),
 		       (array != NULL ? booltostr(array->zeroize) : "((NULL array))"),
