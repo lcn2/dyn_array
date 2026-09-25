@@ -74,6 +74,8 @@ static bool dyn_array_grow(struct dyn_array *array, intmax_t elms_to_allocate);
 static enum ptr_compare compare_addr(void *a, void *b);
 static enum move_case determine_move_case(void *first_alloc, void *last_alloc, void *first_add, void *last_add);
 static char const *move_case_name(enum move_case mv_case);
+static const void *dyn_array_element_ref(const struct dyn_array *array, intmax_t index,
+					 bool allow_one_past_end, char const *caller);
 
 
 /*
@@ -202,6 +204,153 @@ dyn_array_grow(struct dyn_array *array, intmax_t elms_to_allocate)
     }
 
     return moved;
+}
+
+
+/*
+ * dyn_array_element_ref - return the address of an element or one-past-the-end
+ *
+ * given:
+ *	array			- dynamic array to reference
+ *	index			- element index to reference
+ *	allow_one_past_end	- true ==> permit index == array->count
+ *	caller			- helper function name for diagnostics
+ *
+ * returns:
+ *	address of the requested element
+ *
+ * We cannot validate the caller's chosen C type here, but we can at least reject
+ * structurally invalid arrays, negative indexes, out-of-range indexes, and byte
+ * offset calculations that would overflow size_t before pointer arithmetic occurs.
+ *
+ * NOTE: This function does not return on error.
+ */
+static const void *
+dyn_array_element_ref(const struct dyn_array *array, intmax_t index, bool allow_one_past_end, char const *caller)
+{
+    size_t offset;
+
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (caller == NULL) {
+	caller = __func__;
+    }
+    if (array == NULL) {
+	err(159, caller, "array arg is NULL");
+	not_reached();
+    }
+
+    /*
+     * After dyn_array_free() the struct intentionally remains, but its backing
+     * storage pointer becomes NULL.  Preserve the common empty-range pattern by
+     * allowing dyn_array_addr(array, type, 0) / dyn_array_beyond(array, type) to
+     * yield that NULL boundary without performing pointer arithmetic on a NULL base.
+     */
+    if (allow_one_past_end == true && index == 0 && array->count == 0 && array->data == NULL) {
+	return NULL;
+    }
+
+    if (array->data == NULL) {
+	err(160, caller, "array->data in dynamic array is NULL");
+	not_reached();
+    }
+    if (array->elm_size <= 0) {
+	err(161, caller, "array->elm_size in dynamic array must be > 0: %zu", array->elm_size);
+	not_reached();
+    }
+    if (array->count < 0) {
+	err(162, caller, "array->count in dynamic array must be >= 0: %jd", array->count);
+	not_reached();
+    }
+    if (array->allocated < array->count) {
+	err(163, caller, "array->allocated: %jd in dynamic array must be >= array->count: %jd",
+			  array->allocated, array->count);
+	not_reached();
+    }
+    if (index < 0) {
+	err(164, caller, "index must be >= 0: %jd", index);
+	not_reached();
+    }
+
+    /*
+     * dyn_array_value() may only fetch elements already in use.
+     * dyn_array_addr() also permits the standard one-past-the-end iterator value.
+     */
+    if (allow_one_past_end == false && index >= array->count) {
+	err(165, caller, "index: %jd must be < array->count: %jd", index, array->count);
+	not_reached();
+    }
+    if (allow_one_past_end == true && index > array->count) {
+	err(166, caller, "index: %jd must be <= array->count: %jd", index, array->count);
+	not_reached();
+    }
+
+    /*
+     * Convert the element index to a byte offset only after proving the
+     * multiplication fits in size_t, so the pointer arithmetic below cannot wrap.
+     */
+    if ((uintmax_t)index > ((uintmax_t)SIZE_MAX / (uintmax_t)array->elm_size)) {
+	err(167, caller, "index: %jd * elm_size: %zu exceeds size_t bounds [%zu,%zu]",
+			  index, array->elm_size, SIZE_MIN, SIZE_MAX);
+	not_reached();
+    }
+    offset = (size_t)index * array->elm_size;
+    return (uint8_t *)(array->data) + offset;
+}
+
+
+/*
+ * dyn_array_value_ref - return the address of an in-use element
+ *
+ * See dyn_array.h for the typed macro wrapper and its remaining type/alignment
+ * preconditions.
+ *
+ * NOTE: This function does not return on error.
+ */
+void *
+dyn_array_value_ref(struct dyn_array *array, intmax_t index)
+{
+    return (void *)dyn_array_element_ref(array, index, false, __func__);
+}
+
+
+/*
+ * dyn_array_addr_ref - return the address of an in-use element or one-past-end
+ *
+ * See dyn_array.h for the typed macro wrapper and its remaining type/alignment
+ * preconditions.
+ *
+ * NOTE: This function does not return on error.
+ */
+void *
+dyn_array_addr_ref(struct dyn_array *array, intmax_t index)
+{
+    return (void *)dyn_array_element_ref(array, index, true, __func__);
+}
+
+
+/*
+ * dyn_array_value_c_ref - return the address of an in-use element from a const array
+ *
+ * NOTE: This function does not return on error.
+ */
+const void *
+dyn_array_value_c_ref(const struct dyn_array *array, intmax_t index)
+{
+    return dyn_array_element_ref(array, index, false, __func__);
+}
+
+
+/*
+ * dyn_array_addr_c_ref - return the address of an in-use element or one-past-end from a const array
+ *
+ * NOTE: This function does not return on error.
+ */
+const void *
+dyn_array_addr_c_ref(const struct dyn_array *array, intmax_t index)
+{
+    return dyn_array_element_ref(array, index, true, __func__);
 }
 
 
@@ -646,7 +795,10 @@ struct dyn_array *
 dyn_array_create(size_t elm_size, intmax_t chunk, intmax_t start_elm_count, bool zeroize)
 {
     struct dyn_array *ret;		/* Created dynamic array to return */
-    intmax_t number_of_bytes;		/* Total number of bytes occupied by the initialized array */
+    intmax_t chunk_multiple;		/* Number of whole chunks to allocate */
+    intmax_t rounded_request;		/* start_elm_count rounded up to chunk */
+    intmax_t guarded_elements;		/* allocated elements plus the hidden guard chunk */
+    size_t number_of_bytes;		/* Total number of bytes occupied by the initialized array */
 
     /*
      * Check preconditions (firewall) - sanity check args
@@ -661,6 +813,11 @@ dyn_array_create(size_t elm_size, intmax_t chunk, intmax_t start_elm_count, bool
     }
     if (start_elm_count <= 0) {
 	err(73, __func__, "start_elm_count must be > 0: %jd", start_elm_count);
+	not_reached();
+    }
+    if (elm_size > (size_t)INTMAX_MAX) {
+	err(168, __func__, "elm_size: %zu exceeds INTMAX_MAX: %jd and would overflow internal signed arithmetic",
+			  elm_size, INTMAX_MAX);
 	not_reached();
     }
 
@@ -678,26 +835,61 @@ dyn_array_create(size_t elm_size, intmax_t chunk, intmax_t start_elm_count, bool
      * Initialize empty dynamic array
      * Start with a dynamic array with allocated enough chunks to hold at least start_elm_count elements
      */
-    ret->elm_size = (intmax_t)elm_size;
+    ret->elm_size = elm_size;
     ret->zeroize = zeroize;
     /* Allocated array is empty */
     ret->count = 0;
-    /* Allocate a number of elements multiple of chunk */
-    ret->allocated = chunk * ((start_elm_count + (chunk - 1)) / chunk);
+
+    /*
+     * Round the caller's request up to the next chunk boundary only after proving
+     * the addition cannot overflow intmax_t.
+     */
+    if (start_elm_count > INTMAX_MAX - (chunk - 1)) {
+	err(169, __func__, "start_elm_count: %jd + chunk-1: %jd exceeds INTMAX_MAX: %jd",
+			  start_elm_count, chunk - 1, INTMAX_MAX);
+	not_reached();
+    }
+    rounded_request = start_elm_count + (chunk - 1);
+    chunk_multiple = rounded_request / chunk;
+
+    /*
+     * Validate the chunk multiple before multiplying so the public allocated count
+     * itself cannot overflow.
+     */
+    if (chunk_multiple > INTMAX_MAX / chunk) {
+	err(170, __func__, "chunk multiple: %jd * chunk: %jd exceeds INTMAX_MAX: %jd",
+			  chunk_multiple, chunk, INTMAX_MAX);
+	not_reached();
+    }
+    ret->allocated = chunk * chunk_multiple;
     ret->chunk = chunk;
 
     /*
      * determine the size of the allocated area
      */
-    /* +chunk for guard chunk */
-    number_of_bytes = (ret->allocated+chunk) * (intmax_t)elm_size;
+    /*
+     * The hidden guard chunk is counted in bytes but not in array->allocated.
+     * Prove the element-count addition and the byte-count multiplication fit before
+     * performing either operation.
+     */
+    if (ret->allocated > INTMAX_MAX - chunk) {
+	err(171, __func__, "allocated: %jd + guard chunk: %jd exceeds INTMAX_MAX: %jd",
+			  ret->allocated, chunk, INTMAX_MAX);
+	not_reached();
+    }
+    guarded_elements = ret->allocated + chunk;
+    if ((uintmax_t)guarded_elements > ((uintmax_t)SIZE_MAX / (uintmax_t)elm_size)) {
+	err(172, __func__, "guarded element count: %jd * elm_size: %zu exceeds size_t bounds [%zu,%zu]",
+			  guarded_elements, elm_size, SIZE_MIN, SIZE_MAX);
+	not_reached();
+    }
+    number_of_bytes = (size_t)guarded_elements * elm_size;
 
     errno = 0;			/* pre-clear errno for errp() */
-    ret->data = malloc((size_t)number_of_bytes);
+    ret->data = malloc(number_of_bytes);
     if (ret->data == NULL) {
-	/* +chunk for guard chunk */
 	errp(75, __func__, "cannot malloc %jd elements of %zu bytes each for dyn_array->data",
-			   (ret->allocated+chunk), elm_size);
+			   guarded_elements, elm_size);
 	not_reached();
     }
 
@@ -1270,7 +1462,9 @@ bool
 dyn_array_seek(struct dyn_array *array, off_t offset, int whence)
 {
     bool moved = false;		/* true ==> location of the elements array moved during realloc() */
+    intmax_t offset_intmax = 0;	/* offset converted after representability checks */
     intmax_t setpoint = 0;	/* calculated new amount of elements in use */
+    intmax_t base = 0;		/* base position for SEEK_CUR / SEEK_END arithmetic */
 
     /*
      * Check preconditions (firewall) - sanity check args
@@ -1306,6 +1500,25 @@ dyn_array_seek(struct dyn_array *array, off_t offset, int whence)
     }
 
     /*
+     * Reject offsets that cannot be represented as intmax_t before doing any
+     * arithmetic with array->count or array->allocated.
+     */
+    if (sizeof(off_t) > sizeof(intmax_t)) {
+	/*
+	 * Only wider off_t types need an explicit range test.  In that case the
+	 * conversions below widen INTMAX_* into off_t, so the comparison stays in
+	 * the wider signed type and we can reject unrepresentable offsets before
+	 * narrowing them to intmax_t.
+	 */
+	if (offset > (off_t)INTMAX_MAX || offset < (off_t)INTMAX_MIN) {
+	    err(173, __func__, "offset is outside the representable intmax_t range [%jd,%jd]",
+			      INTMAX_MIN, INTMAX_MAX);
+	    not_reached();
+	}
+    }
+    offset_intmax = (intmax_t)offset;
+
+    /*
      * process seek
      */
     switch (whence) {
@@ -1314,21 +1527,35 @@ dyn_array_seek(struct dyn_array *array, off_t offset, int whence)
      * case SEEK_SET: offset from the dynamic array beginning
      */
     case SEEK_SET:
-	setpoint = offset;
+	setpoint = offset_intmax;
 	break;
 
     /*
      * case SEEK_CUR: offset from the current elements in use
      */
     case SEEK_CUR:
-	setpoint = array->count + offset;
+	base = array->count;
+	if ((offset_intmax > 0 && base > INTMAX_MAX - offset_intmax) ||
+	    (offset_intmax < 0 && base < INTMAX_MIN - offset_intmax)) {
+	    err(174, __func__, "array->count: %jd + offset: %jd overflows the valid element-count range",
+			      base, offset_intmax);
+	    not_reached();
+	}
+	setpoint = base + offset_intmax;
 	break;
 
     /*
      * case SEEK_END: offset from the end of allocated elements
      */
     case SEEK_END:
-	setpoint = array->allocated + offset;
+	base = array->allocated;
+	if ((offset_intmax > 0 && base > INTMAX_MAX - offset_intmax) ||
+	    (offset_intmax < 0 && base < INTMAX_MIN - offset_intmax)) {
+	    err(175, __func__, "array->allocated: %jd + offset: %jd overflows the valid element-count range",
+			      base, offset_intmax);
+	    not_reached();
+	}
+	setpoint = base + offset_intmax;
 	break;
 
     default:
@@ -1341,7 +1568,9 @@ dyn_array_seek(struct dyn_array *array, off_t offset, int whence)
     /*
      * case: setpoint before beginning
      *
-     * Convert from before beginning to just the beginning (empty the array).
+     * Representable negative seeks are still part of the documented API: clamp them
+     * back to the beginning.  Arithmetic overflow was rejected above because an
+     * overflowed negative value is not a real caller request.
      */
     if (setpoint < 0) {
 	setpoint = 0;	/* before beginning turns in to empty */
@@ -1492,15 +1721,17 @@ dyn_array_clear(struct dyn_array *array)
 
 
 /*
- * dyn_array_free - free the contents of a dynamic array
+ * dyn_array_free - free the backing storage of a dynamic array
  *
- * This function zeroize any elements in use (if array->zeroize is true),
- * free the data storage, and set the dynamic array to empty.
+ * This function zeroize the currently allocated backing storage (if array->zeroize
+ * is true), free that storage, and reset the struct dyn_array to empty.
  *
  * This function does NOT free the struct dyn_array itself.
- * This function only frees any allocated storage.
+ * This function only frees any allocated storage so that caller-owned structs
+ * remain valid and so a later dyn_array_destroy() call can safely free the
+ * heap-allocated struct without double-freeing the backing storage.
  *
- * See also dyn_array_clear().
+ * See also dyn_array_clear() and dyn_array_destroy().
  *
  * given:
  *      array           - pointer to the dynamic array
@@ -1545,10 +1776,46 @@ dyn_array_free(struct dyn_array *array)
 	dbg(DBG_V5_HIGH, "in %s(array)", __func__);
     }
 
-    free(array);
-    array = NULL;
-
     return;
+}
+
+
+/*
+ * dyn_array_destroy - free both backing storage and the heap-allocated struct
+ *
+ * given:
+ *	array_p		- address of a struct dyn_array pointer
+ *
+ * This helper is the safe companion to dyn_array_create().  It preserves the
+ * long-documented dyn_array_free() contract while also clearing the caller's
+ * pointer so repository code does not keep a dangling struct pointer around.
+ * If *array_p is already NULL, nothing is freed and the call is a documented no-op.
+ *
+ * NOTE: This function does not return on error.
+ */
+void
+dyn_array_destroy(struct dyn_array **array_p)
+{
+    struct dyn_array *array;
+
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array_p == NULL) {
+	err(176, __func__, "array_p arg is NULL");
+	not_reached();
+    }
+    if (*array_p == NULL) {
+	return;
+    }
+
+    array = *array_p;
+    dyn_array_free(array);
+    free(array);
+    *array_p = NULL;
+    if (dbg_allowed(DBG_V5_HIGH)) {
+	dbg(DBG_V5_HIGH, "in %s(array_p): caller pointer cleared", __func__);
+    }
 }
 
 
