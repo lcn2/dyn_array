@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 /*
@@ -83,6 +84,15 @@ static int dbl_cmp(const void *pa, const void *pb);
 #if defined(NON_STANDARD_SORT)
 static int thunk_dbl_cmp(void *pthunk, const void *pa, const void *pb);
 #endif /* NON_STANDARD_SORT */
+static bool expect_fatal_exit(char const *label, int expected_exit, void (*child_test)(void));
+static bool run_remaining_finding_regressions(void);
+static void test_create_elm_size_overflow(void);
+static void test_create_rounding_overflow(void);
+static void test_create_guard_chunk_overflow(void);
+static void test_create_allocation_size_overflow(void);
+static void test_seek_cur_overflow(void);
+static void test_seek_end_overflow(void);
+static void test_macro_value_bounds(void);
 static void usage(int exitcode, char const *str, char const *prog) __attribute__((noreturn));
 
 
@@ -284,6 +294,222 @@ thunk_dbl_cmp(void *pthunk, const void *pa, const void *pb)
 }
 
 #endif /* NON_STANDARD_SORT */
+
+
+/*
+ * expect_fatal_exit - verify that a child process exits with a specific code
+ *
+ * returns:
+ *	true ==> child exited with the expected fatal exit code
+ *	false ==> child exited unexpectedly
+ */
+static bool
+expect_fatal_exit(char const *label, int expected_exit, void (*child_test)(void))
+{
+    pid_t pid;
+    int status;
+
+    if (label == NULL) {
+	label = "((NULL label))";
+    }
+    if (child_test == NULL) {
+	warn(__func__, "child_test is NULL for %s", label);
+	return false;
+    }
+
+    pid = fork();
+    if (pid < 0) {
+	errp(20, __func__, "fork failed for %s", label);
+	not_reached();
+    }
+    if (pid == 0) {
+	child_test();
+	exit(0); /*ooo*/
+    }
+
+    if (waitpid(pid, &status, 0) < 0) {
+	errp(21, __func__, "waitpid failed for %s", label);
+	not_reached();
+    }
+    if (!WIFEXITED(status)) {
+	warn(__func__, "%s did not exit normally", label);
+	return false;
+    }
+    if (WEXITSTATUS(status) != expected_exit) {
+	warn(__func__, "%s exit code: %d != expected: %d", label, WEXITSTATUS(status), expected_exit);
+	return false;
+    }
+    return true;
+}
+
+
+/*
+ * run_remaining_finding_regressions - focused regression coverage for the audit fixes
+ *
+ * returns:
+ *	true ==> all focused regressions passed
+ *	false ==> 1 or more regressions failed
+ */
+static bool
+run_remaining_finding_regressions(void)
+{
+    struct dyn_array *array = NULL;
+    int values[3] = { 10, 20, 30 };
+    int *mid = NULL;
+    int value = 0;
+    bool ok = true;
+
+    dbg(DBG_LOW, "running focused regression tests for the remaining audit findings");
+
+    /*
+     * Valid helper / macro use should continue to work for in-range element access.
+     */
+    array = dyn_array_create(sizeof(int), 4, 4, true);
+    (void) dyn_array_append_set(array, values, 3);
+    mid = dyn_array_addr(array, int, 1);
+    value = dyn_array_value(array, int, 1);
+    if (mid == NULL || *mid != 20 || value != 20) {
+	warn(__func__, "macro/helper regression: mid/value mismatch: mid=%p *mid=%d value=%d",
+		       (void *)mid, (mid == NULL ? -1 : *mid), value);
+	ok = false;
+    }
+
+    /*
+     * Representable seeks before the beginning should still clamp to zero.
+     */
+    (void) dyn_array_seek(array, -10, SEEK_CUR);
+    if (dyn_array_tell(array) != 0) {
+	warn(__func__, "seek clamp regression: dyn_array_tell(array): %jd != 0", dyn_array_tell(array));
+	ok = false;
+    }
+
+    /*
+     * dyn_array_free() must leave the struct valid for an explicit destroy call.
+     */
+    (void) dyn_array_append_set(array, values, 3);
+    dyn_array_free(array);
+    if (array == NULL || array->data != NULL || array->elm_size != 0 || array->count != 0 ||
+	array->allocated != 0 || array->chunk != 0 || array->zeroize != false) {
+	warn(__func__, "dyn_array_free() ownership regression: array=%p data=%p elm_size=%zu zeroize=%s count=%jd allocated=%jd chunk=%jd",
+		       (void *)array, (array == NULL ? NULL : array->data),
+		       (array == NULL ? 0U : array->elm_size),
+		       (array != NULL ? booltostr(array->zeroize) : "((NULL array))"),
+		       (array == NULL ? (intmax_t)0 : array->count),
+		       (array == NULL ? (intmax_t)0 : array->allocated),
+		       (array == NULL ? (intmax_t)0 : array->chunk));
+	ok = false;
+    }
+    dyn_array_destroy(&array);
+    if (array != NULL) {
+	warn(__func__, "dyn_array_destroy() did not clear caller pointer after dyn_array_free()");
+	ok = false;
+    }
+
+    array = dyn_array_create(sizeof(int), 4, 4, true);
+    dyn_array_destroy(&array);
+    if (array != NULL) {
+	warn(__func__, "dyn_array_destroy() did not clear caller pointer");
+	ok = false;
+    }
+
+    /*
+     * Fatal firewall paths are checked in subprocesses so the main test can continue.
+     */
+    ok = expect_fatal_exit("dyn_array_create elm_size overflow", 168, test_create_elm_size_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_create rounding overflow", 169, test_create_rounding_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_create guard chunk overflow", 171, test_create_guard_chunk_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_create byte count overflow", 172, test_create_allocation_size_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_seek SEEK_CUR overflow", 174, test_seek_cur_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_seek SEEK_END overflow", 175, test_seek_end_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_value bounds check", 165, test_macro_value_bounds) && ok;
+
+    return ok;
+}
+
+
+static void
+test_create_elm_size_overflow(void)
+{
+    (void) dyn_array_create((size_t)INTMAX_MAX + (size_t)1, 1, 1, false);
+}
+
+
+static void
+test_create_rounding_overflow(void)
+{
+    (void) dyn_array_create(1, 4, INTMAX_MAX, false);
+}
+
+
+static void
+test_create_guard_chunk_overflow(void)
+{
+    (void) dyn_array_create(1, 1, INTMAX_MAX, false);
+}
+
+
+static void
+test_create_allocation_size_overflow(void)
+{
+    intmax_t start_elm_count;
+
+    start_elm_count = ((INTMAX_MAX / 3) * 2) + 2;
+    (void) dyn_array_create(3, 1, start_elm_count, false);
+}
+
+
+static void
+test_seek_cur_overflow(void)
+{
+    struct dyn_array array;
+
+    memset(&array, 0, sizeof(array));
+    array.elm_size = 1;
+    array.zeroize = false;
+    array.count = INTMAX_MAX;
+    array.allocated = INTMAX_MAX;
+    array.chunk = 1;
+    array.data = malloc(1);
+    if (array.data == NULL) {
+	errp(22, __func__, "malloc failed");
+	not_reached();
+    }
+    (void) dyn_array_seek(&array, 1, SEEK_CUR);
+}
+
+
+static void
+test_seek_end_overflow(void)
+{
+    struct dyn_array array;
+
+    memset(&array, 0, sizeof(array));
+    array.elm_size = 1;
+    array.zeroize = false;
+    array.count = 1;
+    array.allocated = INTMAX_MAX;
+    array.chunk = 1;
+    array.data = malloc(1);
+    if (array.data == NULL) {
+	errp(23, __func__, "malloc failed");
+	not_reached();
+    }
+    (void) dyn_array_seek(&array, 1, SEEK_END);
+}
+
+
+static void
+test_macro_value_bounds(void)
+{
+    struct dyn_array *array;
+    int value = 42;
+    volatile int fetched;
+
+    array = dyn_array_create(sizeof(int), 4, 4, true);
+    (void) dyn_array_append_value(array, &value);
+    fetched = dyn_array_value(array, int, 1);
+    (void) fetched;
+}
 
 
 int
@@ -685,11 +911,17 @@ main(int argc, char *argv[])
 #endif /* NON_STANDARD_SORT */
 
     /*
+     * focused regressions for the remaining audit findings
+     */
+    if (run_remaining_finding_regressions() == false) {
+	error = true;
+    }
+
+    /*
      * free dynamic array
      */
     if (array != NULL) {
-	dyn_array_free(array);
-	array = NULL;
+	dyn_array_destroy(&array);
     }
 
     /*
