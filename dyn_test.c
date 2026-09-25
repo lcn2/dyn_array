@@ -86,7 +86,9 @@ static int thunk_dbl_cmp(void *pthunk, const void *pa, const void *pb);
 #endif /* NON_STANDARD_SORT */
 static bool expect_fatal_exit(char const *label, int expected_exit, void (*child_test)(void));
 static bool run_remaining_finding_regressions(void);
+#if SIZE_MAX > INTMAX_MAX
 static void test_create_elm_size_overflow(void);
+#endif
 static void test_create_rounding_overflow(void);
 static void test_create_guard_chunk_overflow(void);
 static void test_create_allocation_size_overflow(void);
@@ -438,7 +440,9 @@ run_remaining_finding_regressions(void)
     /*
      * Fatal firewall paths are checked in subprocesses so the main test can continue.
      */
+#if SIZE_MAX > INTMAX_MAX
     ok = expect_fatal_exit("dyn_array_create elm_size overflow", 168, test_create_elm_size_overflow) && ok;
+#endif
     ok = expect_fatal_exit("dyn_array_create rounding overflow", 169, test_create_rounding_overflow) && ok;
     ok = expect_fatal_exit("dyn_array_create guard chunk overflow", 171, test_create_guard_chunk_overflow) && ok;
     ok = expect_fatal_exit("dyn_array_create byte count overflow", 172, test_create_allocation_size_overflow) && ok;
@@ -450,13 +454,15 @@ run_remaining_finding_regressions(void)
 }
 
 
+#if SIZE_MAX > INTMAX_MAX
 static void
 test_create_elm_size_overflow(void)
 {
     error_or_ok = false; /* output OK not ERROR when an error is discovered */
-    (void) dyn_array_create((size_t)INTMAX_MAX + (size_t)1, 1, 1, false);
+    (void) dyn_array_create(SIZE_MAX, 1, 1, false);
     error_or_ok = true; /* output ERROR again when an error is discovered */
 }
+#endif
 
 
 static void

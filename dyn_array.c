@@ -103,8 +103,10 @@ dyn_array_grow(struct dyn_array *array, intmax_t elms_to_allocate)
     void *data;			/* Reallocated array */
     intmax_t old_allocated;	/* Old number of elements allocated */
     intmax_t new_allocated;	/* New number of elements allocated */
-    intmax_t old_bytes;		/* Old size of data in dynamic array */
-    intmax_t new_bytes;		/* New size of data in dynamic array after allocation */
+    intmax_t total_allocated;	/* New elements count including guard chunk */
+    size_t old_bytes;		/* Old size of data in dynamic array */
+    size_t new_bytes;		/* New size of data in dynamic array after allocation */
+    size_t zeroize_bytes;	/* Number of bytes to zeroize after growth */
     uint8_t *p;			/* Pointer to the beginning of the new allocated space */
     bool moved = false;		/* true ==> location of the elements array moved during realloc() */
 
@@ -149,29 +151,43 @@ dyn_array_grow(struct dyn_array *array, intmax_t elms_to_allocate)
      * determine the size of the realloced area
      */
     old_allocated = array->allocated;
-    new_allocated = old_allocated + elms_to_allocate;
-    old_bytes = old_allocated * (intmax_t)array->elm_size;
-    /* +array->chunk for guard chunk */
-    new_bytes = (new_allocated+array->chunk) * (intmax_t)array->elm_size;
-
-    /*
-     * firewall - check if new_bytes fits in a size_t variable
-     */
-    if ((double)new_bytes > (double)SIZE_MAX) {
-	err(57, __func__, "the total number of bytes occupied by %jd elements of size %zu is too big "
-			  "and does not fit the bounds of a size_t [%zu,%zu]",
-			  new_allocated, array->elm_size, SIZE_MIN, SIZE_MAX);
+    if (old_allocated > INTMAX_MAX - elms_to_allocate) {
+	err(57, __func__, "the total number of elements to allocate is too big "
+			  "[old_allocated: %jd, elms_to_allocate: %jd, INTMAX_MAX: %jd]",
+			  old_allocated, elms_to_allocate, (intmax_t)INTMAX_MAX);
 	not_reached();
     }
+    new_allocated = old_allocated + elms_to_allocate;
+    if (new_allocated > INTMAX_MAX - array->chunk) {
+	err(57, __func__, "the total number of elements including guard chunk is too big "
+			  "[new_allocated: %jd, chunk: %jd, INTMAX_MAX: %jd]",
+			  new_allocated, array->chunk, (intmax_t)INTMAX_MAX);
+	not_reached();
+    }
+    total_allocated = new_allocated + array->chunk;
+    if ((size_t)old_allocated > SIZE_MAX / array->elm_size) {
+	err(57, __func__, "the existing number of bytes occupied by %jd elements of size %zu is too big "
+			  "and does not fit the bounds of a size_t [%zu,%zu]",
+			  old_allocated, array->elm_size, SIZE_MIN, SIZE_MAX);
+	not_reached();
+    }
+    old_bytes = (size_t)old_allocated * array->elm_size;
+    if ((size_t)total_allocated > SIZE_MAX / array->elm_size) {
+	err(57, __func__, "the total number of bytes occupied by %jd elements of size %zu is too big "
+			  "and does not fit the bounds of a size_t [%zu,%zu]",
+			  total_allocated, array->elm_size, SIZE_MIN, SIZE_MAX);
+	not_reached();
+    }
+    new_bytes = (size_t)total_allocated * array->elm_size;
 
     /*
      * reallocate array
      */
     errno = 0;			/* pre-clear errno for errp() */
-    data = realloc(array->data, (size_t)new_bytes);
+    data = realloc(array->data, new_bytes);
     if (data == NULL) {
-	errp(58, __func__, "failed to reallocate the dynamic array from a size of %jd bytes "
-			   "to a size of %jd bytes",
+	errp(58, __func__, "failed to reallocate the dynamic array from a size of %zu bytes "
+			   "to a size of %zu bytes",
 			   old_bytes, new_bytes);
 	not_reached();
     }
@@ -199,8 +215,8 @@ dyn_array_grow(struct dyn_array *array, intmax_t elms_to_allocate)
      */
     if (array->zeroize == true) {
 	p = (uint8_t *) (array->data) + old_bytes;
-	/* +array->chunk for guard chunk */
-	memset(p, 0, (elms_to_allocate+array->chunk) * (intmax_t)array->elm_size);
+	zeroize_bytes = new_bytes - old_bytes;
+	memset(p, 0, zeroize_bytes);
     }
 
     return moved;
