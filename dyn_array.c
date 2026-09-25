@@ -1143,3 +1143,830 @@ dyn_array_append_set(struct dyn_array *array, void *array_to_add_p, intmax_t cou
     /* return array moved condition */
     return moved;
 }
+/*
+ * dyn_array_concat_array - concatenate a dynamic array with another dynamic array
+ *
+ * given:
+ *      array			- pointer to the dynamic array
+ *	other			- other dynamic array to concatenate onto array
+ *
+ * returns:
+ *	true ==> address of the array of elements moved during realloc()
+ *	false ==> address of the elements array did not move
+ *
+ * We will add a set (non-dynamic array) of values of the given array (which are of a given type)
+ * onto the end of the dynamic array. We will grow the dynamic array if all allocated values are used.
+ *
+ * We will take the contents of the other dynamic array and concatenate its values onto
+ * the first dynamic array.  The contents of the other dynamic array will be duplicated onto the
+ * first dynamic array.
+ *
+ * This function does nothing if the other dynamic array is empty.
+ *
+ * The contents of the other dynamic array is not modified, nor freed by this function.
+ *
+ * If after adding the values of the array, all allocated values are used, we will grow
+ * the dynamic array as a firewall.
+ *
+ * NOTE: This function does not return on error.
+ */
+bool
+dyn_array_concat_array(struct dyn_array *array, struct dyn_array *other)
+{
+    bool moved = false;		/* true ==> location of the elements array moved during realloc() */
+
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array == NULL) {
+	err(104, __func__, "array arg is NULL");
+	not_reached();
+    }
+    if (other == NULL) {
+	err(105, __func__, "other arg is NULL");
+	not_reached();
+    }
+
+    /*
+     * Check preconditions (firewall) - sanity check array
+     */
+    if (array->data == NULL) {
+	err(106, __func__, "array->data in first dynamic array is NULL");
+	not_reached();
+    }
+    if (array->elm_size <= 0) {
+	err(107, __func__, "array->elm_size in first dynamic array must be > 0: %zu", array->elm_size);
+	not_reached();
+    }
+    if (array->chunk <= 0) {
+	err(108, __func__, "array->chunk in first dynamic array must be > 0: %jd", array->chunk);
+	not_reached();
+    }
+    if (array->allocated <= 0) {
+	err(109, __func__, "array->allocated in dynamic array must be > 0: %jd", array->allocated);
+	not_reached();
+    }
+    if (array->count > array->allocated) {
+	err(110, __func__, "array->count: %jd in first dynamic array must be <= array->allocated: %jd",
+			  array->count, array->allocated);
+	not_reached();
+    }
+
+    /*
+     * Check preconditions (firewall) - sanity check other
+     */
+    if (other->data == NULL) {
+	err(111, __func__, "other->data in second dynamic array is NULL");
+	not_reached();
+    }
+    if (other->elm_size <= 0) {
+	err(112, __func__, "other->elm_size in second dynamic array must be > 0: %zu", other->elm_size);
+	not_reached();
+    }
+    if (other->chunk <= 0) {
+	err(113, __func__, "other->chunk in second dynamic array must be > 0: %jd", other->chunk);
+	not_reached();
+    }
+    if (other->allocated <= 0) {
+	err(114, __func__, "other->chunk in dynamic array must be > 0: %jd", other->allocated);
+	not_reached();
+    }
+    if (other->count > other->allocated) {
+	err(115, __func__, "other->count: %jd in second dynamic array must be <= other->allocated: %jd",
+			  other->count, other->allocated);
+	not_reached();
+    }
+
+    /*
+     * concatenate other dynamic array
+     */
+    moved = dyn_array_append_set(array, other->data, other->count);
+
+    /* return array moved condition */
+    return moved;
+}
+
+
+/*
+ * dyn_array_seek - set the elements in use on a dynamic array
+ *
+ * given:
+ *      array		- pointer to the dynamic array
+ *	offset		- offset in elements
+ *	whence		- SEEK_SET ==> offset from the dynamic array beginning
+ *			  SEEK_CUR ==> offset from the current elements in use
+ *			  SEEK_END ==> offset from the end of allocated elements
+ *
+ * returns:
+ *	true ==> address of the array of elements moved during realloc()
+ *	false ==> address of the elements array did not move
+ *
+ * Attempting to "seek" to or before the beginning of the array will have the effect
+ * of calling dyn_array_clear().
+ *
+ * NOTE: This function does not return on error.
+ */
+bool
+dyn_array_seek(struct dyn_array *array, off_t offset, int whence)
+{
+    bool moved = false;		/* true ==> location of the elements array moved during realloc() */
+    intmax_t setpoint = 0;	/* calculated new amount of elements in use */
+
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array == NULL) {
+	err(116, __func__, "array arg is NULL");
+	not_reached();
+    }
+
+    /*
+     * Check preconditions (firewall) - sanity check array
+     */
+    if (array->data == NULL) {
+	err(117, __func__, "array->data in dynamic array is NULL");
+	not_reached();
+    }
+    if (array->elm_size <= 0) {
+	err(118, __func__, "array->elm_size in dynamic array must be > 0: %ju", (uintmax_t)array->elm_size);
+	not_reached();
+    }
+    if (array->chunk <= 0) {
+	err(119, __func__, "array->chunk in dynamic array must be > 0: %jd", array->chunk);
+	not_reached();
+    }
+    if (array->allocated <= 0) {
+	err(120, __func__, "array->allocated in dynamic array must be > 0: %jd", array->allocated);
+	not_reached();
+    }
+    if (array->count > array->allocated) {
+	err(121, __func__, "array->count: %jd in dynamic array must be <= array->allocated: %jd",
+			  array->count, array->allocated);
+	not_reached();
+    }
+
+    /*
+     * process seek
+     */
+    switch (whence) {
+
+    /*
+     * case SEEK_SET: offset from the dynamic array beginning
+     */
+    case SEEK_SET:
+	setpoint = offset;
+	break;
+
+    /*
+     * case SEEK_CUR: offset from the current elements in use
+     */
+    case SEEK_CUR:
+	setpoint = array->count + offset;
+	break;
+
+    /*
+     * case SEEK_END: offset from the end of allocated elements
+     */
+    case SEEK_END:
+	setpoint = array->allocated + offset;
+	break;
+
+    default:
+	err(122, __func__, "whence: %d != SEEK_SET: %d != SEEK_CUR: %d != SEEK_END: %d",
+			  whence, SEEK_SET, SEEK_CUR, SEEK_END);
+	not_reached();
+	break;
+    }
+
+    /*
+     * case: setpoint before beginning
+     *
+     * Convert from before beginning to just the beginning (empty the array).
+     */
+    if (setpoint < 0) {
+	setpoint = 0;	/* before beginning turns in to empty */
+    }
+
+    /*
+     * case: set to beginning or before beginning
+     *
+     * Just clear the array and set length to 0.
+     */
+    if (setpoint <= 0) {
+
+	/* reduce array in use count to 0 */
+	dyn_array_clear(array);
+
+    /*
+     * case: shrink to before in use point
+     *
+     * Shrink the array.
+     */
+    } else if (setpoint < array->count) {
+
+	/* zeroize elements after new shrink point if requested */
+	if (array->zeroize == true) {
+	    memset((uint8_t *)array->data + (setpoint * (intmax_t)array->elm_size), 0,
+		   (array->count - setpoint) * (intmax_t)array->elm_size);
+	}
+
+    /*
+     * case: no change in size
+     *
+     * Nothing to do.
+     */
+    } else if (setpoint == array->count) {
+
+	/* no change in the in use count */
+
+    /*
+     * case: expand in use below allocated size
+     *
+     * Expand the array within current allocation size.
+     */
+    } else if (setpoint <= array->allocated) {
+
+	/* zeroize new elements beyond current in use point */
+	if (array->zeroize == true) {
+	    memset((uint8_t *)array->data + (array->count * (intmax_t)array->elm_size), 0,
+		   (setpoint - array->count) * (intmax_t)array->elm_size);
+	}
+
+    /*
+     * case: expand beyond current allocation
+     *
+     * Grow the array.
+     */
+    } else {
+
+	/* grow the array */
+	moved = dyn_array_grow(array, setpoint - array->allocated);
+    }
+
+    /* set new in use count */
+    array->count = setpoint;
+    if (dbg_allowed(DBG_V7_HIGH)) {
+	dbg(DBG_V7_HIGH, "in %s(array, %lld, %s): %s: allocated: %jd elements of size: %zu in use: %jd",
+		       __func__,
+		       (long long)offset,
+		       (whence == SEEK_SET ? "SEEK_SET" : (whence == SEEK_CUR ? "SEEK_CUR" : "SEEK_END")),
+		       (moved == true ? "moved" : "in-place"),
+		       dyn_array_alloced(array),
+		       array->elm_size,
+		       dyn_array_tell(array));
+    }
+
+    /* return array moved condition */
+    return moved;
+}
+
+
+/*
+ * dyn_array_clear - clear the dynamic array
+ *
+ * This function zeroize any element in use (if array->zeroize is true),
+ * and then set the number of element in use to 0.
+ *
+ * This function does NOT free allocated storage.
+ *
+ * See also dyn_array_free().
+ *
+ * given:
+ *      array		- pointer to the dynamic array
+ *
+ * NOTE: This function does not return on error.
+ */
+void
+dyn_array_clear(struct dyn_array *array)
+{
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array == NULL) {
+	err(123, __func__, "array arg is NULL");
+	not_reached();
+    }
+
+    /*
+     * Check preconditions (firewall) - sanity check array
+     */
+    if (array->data == NULL) {
+	err(124, __func__, "array->data for dynamic array is NULL");
+	not_reached();
+    }
+    if (array->elm_size <= 0) {
+	err(125, __func__, "array->elm_size in dynamic array must be > 0: %zu", array->elm_size);
+	not_reached();
+    }
+    if (array->chunk <= 0) {
+	err(126, __func__, "array->chunk in dynamic array must be > 0: %jd", array->chunk);
+	not_reached();
+    }
+    if (array->allocated <= 0) {
+	err(128, __func__, "array->allocated in dynamic array must be > 0: %jd", array->allocated);
+	not_reached();
+    }
+    if (array->count > array->allocated) {
+	err(129, __func__, "array->count: %jd in dynamic array must be <= array->allocated: %jd",
+			  array->count, array->allocated);
+	not_reached();
+    }
+
+    /*
+     * Zeroize the elements currently in the array
+     */
+    if (array->zeroize == true) {
+	memset(array->data, 0, array->count * (intmax_t)array->elm_size);
+    }
+
+    /*
+     * Set the number of elements in the array to zero
+     */
+    array->count = 0;
+    if (dbg_allowed(DBG_V3_HIGH)) {
+	dbg(DBG_V3_HIGH, "in %s(array) not-moved: allocated: %jd elements of size: %zu in use: %jd",
+		     __func__, dyn_array_alloced(array), array->elm_size, dyn_array_tell(array));
+    }
+    return;
+}
+
+
+/*
+ * dyn_array_free - free the contents of a dynamic array
+ *
+ * This function zeroize any elements in use (if array->zeroize is true),
+ * free the data storage, and set the dynamic array to empty.
+ *
+ * This function does NOT free the struct dyn_array itself.
+ * This function only frees any allocated storage.
+ *
+ * See also dyn_array_clear().
+ *
+ * given:
+ *      array           - pointer to the dynamic array
+ *
+ * NOTE: This function does not return on error.
+ */
+void
+dyn_array_free(struct dyn_array *array)
+{
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array == NULL) {
+	err(130, __func__, "array arg is NULL");
+	not_reached();
+    }
+
+    /*
+     * Zeroize allocated data
+     */
+    if (array->zeroize == true && array->data != NULL && array->allocated > 0 && array->elm_size > 0) {
+	memset(array->data, 0, array->allocated * (intmax_t)array->elm_size);
+    }
+
+    /*
+     * Free any storage this dynamic array might have
+     */
+    if (array->data != NULL) {
+	free(array->data);
+	array->data = NULL;
+    }
+
+    /*
+     * Zero the count and allocation
+     */
+    array->elm_size = 0;
+    array->zeroize = false;
+    array->count = 0;
+    array->allocated = 0;
+    array->chunk = 0;
+    if (dbg_allowed(DBG_V5_HIGH)) {
+	dbg(DBG_V5_HIGH, "in %s(array)", __func__);
+    }
+
+    free(array);
+    array = NULL;
+
+    return;
+}
+
+
+/*
+ * dyn_array_qsort - use the qsort(3) facility on a dynamic array
+ *
+ * The contents of the array base are sorted in ascending order according to a comparison function pointed
+ * to by compar, which requires two arguments pointing to the objects being compared.
+ (
+ * The comparison function must return an integer less than, equal to, or greater than zero if the first
+ * argument is considered to be respectively less than, equal to, or greater than the second.
+ *
+ * given:
+ *      array           - pointer to the dynamic array
+ *	compar		- comparison function pointing to the objects being compared
+ *
+ * NOTE: This function does not return on error.
+ */
+void
+dyn_array_qsort(struct dyn_array *array, int (*compar)(const void *, const void *))
+{
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array == NULL) {
+	err(131, __func__, "array arg is NULL");
+	not_reached();
+    }
+    if (compar == NULL) {
+	err(132, __func__, "compar arg is NULL");
+	not_reached();
+    }
+
+    /*
+     * Check preconditions (firewall) - sanity check array
+     */
+    if (array->data == NULL) {
+	err(133, __func__, "array->data in dynamic array is NULL");
+	not_reached();
+    }
+    if (array->elm_size <= 0) {
+	err(134, __func__, "array->elm_size in dynamic array must be > 0: %zu", array->elm_size);
+	not_reached();
+    }
+    if (array->chunk <= 0) {
+	err(135, __func__, "array->chunk in dynamic array must be > 0: %jd", array->chunk);
+	not_reached();
+    }
+    if (array->allocated <= 0) {
+	err(136, __func__, "array->allocated in dynamic array must be > 0: %jd", array->allocated);
+	not_reached();
+    }
+    if (array->count > array->allocated) {
+	err(137, __func__, "array->count: %jd in dynamic array must be <= array->allocated: %jd",
+			  array->count, array->allocated);
+	not_reached();
+    }
+
+    /*
+     * quick return - less than 2 elements means nothing to sort
+     */
+    if (array->count < 2) {
+	return;
+    }
+
+    /*
+     * sort the dynamic array according to the comparison function order
+     */
+    qsort(array->data, (size_t)(array->count), (size_t)(array->elm_size), compar);
+}
+
+
+#if defined(NON_STANDARD_SORT)
+
+/*
+ * NON_STANDARD_SORT
+ *
+ * It is sad that qsort_r() is not part of the standard C library as of 2025.  Worse yet, clang libc and gnu libc
+ * put the thunk argument in different positions in the comparison library.
+ *
+ * It is sad that both heapsort() and mergesort() part of the standard C library as of 2025.
+ */
+
+/*
+ * dyn_array_qsort_r - use the qsort_r(3) facility on a dynamic array
+ *
+ * The contents of the array base are sorted in ascending order according to a comparison function pointed
+ * to by compar, which requires a pointer to thunk followed by two arguments pointing to the objects being compared.
+ *
+ * The thunk value allows the comparison function to access additional data without using global variables,
+ * making function suitable for use in functions which must be reentrant.
+ *
+ * The comparison function must return an integer less than, equal to, or greater than zero if the first
+ * argument is considered to be respectively less than, equal to, or greater than the second.
+ *
+ * given:
+ *      array           - pointer to the dynamic array
+ *	compar		- comparison function pointing to thunk and the objects being compared
+ *	thunk		- additional unchanged data that as passed as the 1st argument to compar
+ *
+ * NOTE: This function does not return on error.
+ */
+void
+dyn_array_qsort_r(struct dyn_array *array, void *thunk, int (*compar)(void *, const void *, const void *))
+{
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array == NULL) {
+	err(138, __func__, "array arg is NULL");
+	not_reached();
+    }
+    if (compar == NULL) {
+	err(139, __func__, "compar arg is NULL");
+	not_reached();
+    }
+
+    /*
+     * Check preconditions (firewall) - sanity check array
+     */
+    if (array->data == NULL) {
+	err(140, __func__, "array->data in dynamic array is NULL");
+	not_reached();
+    }
+    if (array->elm_size <= 0) {
+	err(141, __func__, "array->elm_size in dynamic array must be > 0: %zu", array->elm_size);
+	not_reached();
+    }
+    if (array->chunk <= 0) {
+	err(142, __func__, "array->chunk in dynamic array must be > 0: %jd", array->chunk);
+	not_reached();
+    }
+    if (array->allocated <= 0) {
+	err(143, __func__, "array->allocated in dynamic array must be > 0: %jd", array->allocated);
+	not_reached();
+    }
+    if (array->count > array->allocated) {
+	err(144, __func__, "array->count: %jd in dynamic array must be <= array->allocated: %jd",
+			  array->count, array->allocated);
+	not_reached();
+    }
+
+    /*
+     * quick return - less than 2 elements means nothing to sort
+     */
+    if (array->count < 2) {
+	return;
+    }
+
+    /*
+     * sort the dynamic array according to the comparison function order
+     */
+    qsort_r(array->data, (size_t)(array->count), (size_t)(array->elm_size), thunk, compar);
+}
+
+
+/*
+ * dyn_array_heapsort - use the heapsort(3) facility on a dynamic array
+ *
+ * The contents of the array base are sorted in ascending order according to a comparison function pointed
+ * to by compar, which requires two arguments pointing to the objects being compared.
+ (
+ * The comparison function must return an integer less than, equal to, or greater than zero if the first
+ * argument is considered to be respectively less than, equal to, or greater than the second.
+ *
+ * given:
+ *      array           - pointer to the dynamic array
+ *	compar		- comparison function pointing to the objects being compared
+ *
+ * returns:
+ *	0 ==> sort successful (errno set to 0)
+ *	-1 ==> sort error (errno is also set)
+ *
+ * NOTE: This function does not return when given invalid arguments.
+ */
+int
+dyn_array_heapsort(struct dyn_array *array, int (*compar)(const void *, const void *))
+{
+    int ret;		    /* heapsort return value */
+
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array == NULL) {
+	err(145, __func__, "array arg is NULL");
+	not_reached();
+    }
+    if (compar == NULL) {
+	err(146, __func__, "compar arg is NULL");
+	not_reached();
+    }
+
+    /*
+     * Check preconditions (firewall) - sanity check array
+     */
+    if (array->data == NULL) {
+	err(147, __func__, "array->data in dynamic array is NULL");
+	not_reached();
+    }
+    if (array->elm_size <= 0) {
+	err(148, __func__, "array->elm_size in dynamic array must be > 0: %zu", array->elm_size);
+	not_reached();
+    }
+    if (array->chunk <= 0) {
+	err(149, __func__, "array->chunk in dynamic array must be > 0: %jd", array->chunk);
+	not_reached();
+    }
+    if (array->allocated <= 0) {
+	err(150, __func__, "array->allocated in dynamic array must be > 0: %jd", array->allocated);
+	not_reached();
+    }
+    if (array->count > array->allocated) {
+	err(151, __func__, "array->count: %jd in dynamic array must be <= array->allocated: %jd",
+			  array->count, array->allocated);
+	not_reached();
+    }
+
+    /*
+     * quick return - less than 2 elements means nothing to sort
+     */
+    errno = 0;
+    if (array->count < 2) {
+	return 0;
+    }
+
+    /*
+     * sort the dynamic array according to the comparison function order
+     */
+    ret = heapsort(array->data, (size_t)(array->count), (size_t)(array->elm_size), compar);
+    return ret;
+}
+
+
+/*
+ * dyn_array_mergesort - use the mergesort(3) facility on a dynamic array
+ *
+ * The contents of the array base are sorted in ascending order according to a comparison function pointed
+ * to by compar, which requires two arguments pointing to the objects being compared.
+ (
+ * The comparison function must return an integer less than, equal to, or greater than zero if the first
+ * argument is considered to be respectively less than, equal to, or greater than the second.
+ *
+ * given:
+ *      array           - pointer to the dynamic array
+ *	compar		- comparison function pointing to the objects being compared
+ *
+ * returns:
+ *	0 ==> sort successful
+ *	-1 ==> sort error (errno is also set)
+ *
+ * NOTE: This function does not return when given invalid arguments.
+ */
+int
+dyn_array_mergesort(struct dyn_array *array, int (*compar)(const void *, const void *))
+{
+    int ret;		    /* mergesort return value */
+
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array == NULL) {
+	err(152, __func__, "array arg is NULL");
+	not_reached();
+    }
+    if (compar == NULL) {
+	err(153, __func__, "compar arg is NULL");
+	not_reached();
+    }
+
+    /*
+     * Check preconditions (firewall) - sanity check array
+     */
+    if (array->data == NULL) {
+	err(154, __func__, "array->data in dynamic array is NULL");
+	not_reached();
+    }
+    if (array->elm_size <= 0) {
+	err(155, __func__, "array->elm_size in dynamic array must be > 0: %zu", array->elm_size);
+	not_reached();
+    }
+    if (array->chunk <= 0) {
+	err(156, __func__, "array->chunk in dynamic array must be > 0: %jd", array->chunk);
+	not_reached();
+    }
+    if (array->allocated <= 0) {
+	err(157, __func__, "array->allocated in dynamic array must be > 0: %jd", array->allocated);
+	not_reached();
+    }
+    if (array->count > array->allocated) {
+	err(158, __func__, "array->count: %jd in dynamic array must be <= array->allocated: %jd",
+			  array->count, array->allocated);
+	not_reached();
+    }
+
+    /*
+     * quick return - less than 2 elements means nothing to sort
+     */
+    errno = 0;
+    if (array->count < 2) {
+	return 0;
+    }
+
+    /*
+     * sort the dynamic array according to the comparison function order
+     */
+    ret = mergesort(array->data, (size_t)(array->count), (size_t)(array->elm_size), compar);
+    return ret;
+}
+
+#endif /* NON_STANDARD_SORT */
+
+
+/*
+ * dyn_array_top - obtain the last element ("top of stack"), if dynamic array isn't empty
+ *
+ * given:
+ *      array           - pointer to the dynamic array
+ *      fetched_value   - NULL ==> do not store the last element,
+ *			  != NULL ==> where to copy the value of the last element
+ *
+ * returns:
+ *	>0 ==> element count of the dynamic array
+ *	0 ==> stack underflow, stack was empty
+ *	<0 ==> array is NULL, or invalid array byte size of a single element
+ */
+intmax_t
+dyn_array_top(struct dyn_array *array, void *fetched_value)
+{
+    uint8_t *last;		/* pointer to 1st byte of the last element */
+
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array == NULL) {
+	warn("%s: array is NULL", __func__);
+	return -1;
+    }
+    if (array->elm_size <= 0) {
+	warn("%s: array element size <= 0", __func__);
+	return -1;
+    }
+
+    /*
+     * firewall - check for stack underflow
+     */
+    if (array->count <= 0) {
+	/* report stack underflow */
+	return 0;
+    }
+
+    /*
+     * copy the last element if value_to_add is non-NULL
+     */
+    if (fetched_value != NULL) {
+	last = (uint8_t *)(array->data) + ((array->count-1) * (intmax_t)array->elm_size);
+	memmove(fetched_value, last, array->elm_size);
+    }
+
+    /*
+     * return current count of the dynamic array
+     */
+    return array->count;
+}
+
+
+/*
+ * dyn_array_pop - remove the last element ("pop the stack"), if dynamic array isn't empty
+ *
+ * given:
+ *      array           - pointer to the dynamic array
+ *      fetched_value   - NULL ==> do not store the last element,
+ *			  != NULL ==> where to copy the value of the last element
+ *
+ * returns:
+ *	>0 ==> element count of the dynamic array
+ *	0 ==> stack underflow, stack was empty
+ *	<0 ==> array is NULL, or invalid array byte size of a single element
+ */
+intmax_t
+dyn_array_pop(struct dyn_array *array, void *fetched_value)
+{
+    uint8_t *last;		/* pointer to 1st byte of the last element */
+
+    /*
+     * Check preconditions (firewall) - sanity check args
+     */
+    if (array == NULL) {
+	warn("%s: array is NULL", __func__);
+	return -1;
+    }
+    if (array->elm_size <= 0) {
+	warn("%s: array element size <= 0", __func__);
+	return -1;
+    }
+
+    /*
+     * firewall - check for stack underflow
+     */
+    if (array->count <= 0) {
+	/* report stack underflow */
+	return 0;
+    }
+
+    /*
+     * copy the last element if value_to_add is non-NULL
+     */
+    if (fetched_value != NULL) {
+	last = (uint8_t *)(array->data) + ((array->count-1) * (intmax_t)array->elm_size);
+	memmove(fetched_value, last, array->elm_size);
+    }
+
+    /*
+     * decrement stack size
+     */
+    --array->count;
+
+    /*
+     * return current count of the dynamic array
+     */
+    return array->count;
+}
