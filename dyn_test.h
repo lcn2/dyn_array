@@ -43,7 +43,7 @@
 /*
  * official versions
  */
-#define DYN_TEST_VERSION "1.12.0 2026-09-24"	/* format: major.minor.patch YYYY-MM-DD */
+#define DYN_TEST_VERSION "1.12.1 2026-09-25"	/* format: major.minor.patch YYYY-MM-DD */
 
 /*
  * dyn_array - dynamic array facility

@@ -58,12 +58,13 @@
  * Use the usage() function to print the usage_msg([0-9]?)+ strings.
  */
 static const char * const usage_msg =
-    "usage: %s [-h] [-v level] [-V] [-s seed]\n"
+    "usage: %s [-h] [-v level] [-V] [-s seed] [-e]\n"
     "\n"
     "\t-h\t\tprint help message and exit\n"
     "\t-v level\tset verbosity level (def level: %d)\n"
     "\t-V\t\tprint version string and exit\n"
     "\t-s seed\t\tset seed for srandom() (def: %u)\n"
+    "\t-e\t\tdisable expect_fatal_exit() tests (def: enable)\n"
     "\n"
     "\n"
     "Exit codes:\n"
@@ -160,6 +161,7 @@ bool usage_output_allowed = true;	/* false ==> disable usage messages */
 bool msg_warn_silent = false;		/* true ==> silence info & warnings if verbosity_level <= 0 */
 bool error_or_ok = true;		/* true ==> output ERROR[code], false ==> output OK[code] */
 int ok_min_verbosity_level = DBG_LOW;	/* don't output OK unless verbosity_level >= ok_min_verbosity_level */
+bool enable_expect_fatal_exit = true;   /* true ==> enable use of expect_fatal_exit(), false => disable */
 
 /*
  * forward declarations
@@ -323,6 +325,15 @@ expect_fatal_exit(char const *label, int expected_exit, void (*child_test)(void)
     if (child_test == NULL) {
 	warn(__func__, "child_test is NULL for %s", label);
 	return false;
+    }
+
+    /*
+     * quick exit if these tests are disabled
+     *
+     * If not enabled, we will just pretend the child process was OK
+     */
+    if (!enable_expect_fatal_exit) {
+	return true;
     }
 
     pid = fork();
@@ -576,7 +587,7 @@ main(int argc, char *argv[])
      * parse args
      */
     program = argv[0];
-    while ((i = getopt(argc, argv, ":hv:Vs:")) != -1) {
+    while ((i = getopt(argc, argv, ":hv:Vs:e")) != -1) {
 	switch (i) {
 	case 'h':		/* -h - print help to stderr and exit 0 */
 	    usage(2, program, ""); /*ooo*/
@@ -604,6 +615,9 @@ main(int argc, char *argv[])
 		err(15, __func__, "strtoul error");
 		not_reached();
 	    }
+	    break;
+	case 'e':
+	    enable_expect_fatal_exit = false;
 	    break;
 	case ':':   /* option requires an argument */
 	case '?':   /* illegal option */
