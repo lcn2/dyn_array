@@ -338,7 +338,7 @@ expect_fatal_exit(char const *label, int expected_exit, void (*child_test)(void)
 
     pid = fork();
     if (pid < 0) {
-	errp(20, __func__, "fork failed for %s", label);
+	errp(15, __func__, "fork failed for %s", label);
 	not_reached();
     }
     if (pid == 0) {
@@ -347,7 +347,7 @@ expect_fatal_exit(char const *label, int expected_exit, void (*child_test)(void)
     }
 
     if (waitpid(pid, &status, 0) < 0) {
-	errp(21, __func__, "waitpid failed for %s", label);
+	errp(16, __func__, "waitpid failed for %s", label);
 	not_reached();
     }
     if (!WIFEXITED(status)) {
@@ -520,7 +520,7 @@ test_seek_cur_overflow(void)
     array.chunk = 1;
     array.data = malloc(1);
     if (array.data == NULL) {
-	errp(22, __func__, "malloc failed");
+	errp(17, __func__, "malloc failed");
 	not_reached();
     }
     error_or_ok = false; /* output OK not ERROR when an error is discovered */
@@ -542,7 +542,7 @@ test_seek_end_overflow(void)
     array.chunk = 1;
     array.data = malloc(1);
     if (array.data == NULL) {
-	errp(23, __func__, "malloc failed");
+	errp(18, __func__, "malloc failed");
 	not_reached();
     }
     error_or_ok = false; /* output OK not ERROR when an error is discovered */
@@ -612,7 +612,7 @@ main(int argc, char *argv[])
 	    errno = 0;
 	    seed = strtoul(optarg, NULL, 0);
 	    if (errno != 0) {
-		err(15, __func__, "strtoul error");
+		err(19, __func__, "strtoul error");
 		not_reached();
 	    }
 	    break;
@@ -729,7 +729,7 @@ main(int argc, char *argv[])
     dbg(DBG_MED, "dyn_array_heapsort() array, that is already sorted, using dbl_cmp");
     ret = dyn_array_heapsort(array, dbl_cmp);
     if (ret != 0) {
-	errp(16, __func__, "dyn_array_heapsort() error: %d", ret);
+	errp(20, __func__, "dyn_array_heapsort() error: %d", ret);
 	not_reached();
     }
 
@@ -751,7 +751,7 @@ main(int argc, char *argv[])
     dbg(DBG_MED, "dyn_array_mergesort() array, that is already sorted, using dbl_cmp");
     ret = dyn_array_mergesort(array, dbl_cmp);
     if (ret != 0) {
-	errp(17, __func__, "dyn_array_mergesort() error: %d", ret);
+	errp(21, __func__, "dyn_array_mergesort() error: %d", ret);
 	not_reached();
     }
 
@@ -914,7 +914,7 @@ main(int argc, char *argv[])
     dbg(DBG_LOW, "calling dyn_array_heapsort() array, that as quasi-sorted, using dbl_cmp");
     ret = dyn_array_heapsort(array, dbl_cmp);
     if (ret != 0) {
-	errp(18, __func__, "dyn_array_heapsort() error: %d", ret);
+	errp(22, __func__, "dyn_array_heapsort() error: %d", ret);
 	not_reached();
     }
 
@@ -950,7 +950,7 @@ main(int argc, char *argv[])
     dbg(DBG_LOW, "calling dyn_array_mergesort() array, that as quasi-sorted, using dbl_cmp");
     ret = dyn_array_mergesort(array, dbl_cmp);
     if (ret != 0) {
-	errp(19, __func__, "dyn_array_mergesort() error: %d", ret);
+	errp(23, __func__, "dyn_array_mergesort() error: %d", ret);
 	not_reached();
     }
 
