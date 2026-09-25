@@ -239,6 +239,17 @@ dyn_array_element_ref(struct dyn_array *array, intmax_t index, bool allow_one_pa
 	err(159, caller, "array arg is NULL");
 	not_reached();
     }
+
+    /*
+     * After dyn_array_free() the struct intentionally remains, but its backing
+     * storage pointer becomes NULL.  Preserve the common empty-range pattern by
+     * allowing dyn_array_addr(array, type, 0) / dyn_array_beyond(array, type) to
+     * yield that NULL boundary without performing pointer arithmetic on a NULL base.
+     */
+    if (allow_one_past_end == true && index == 0 && array->count == 0 && array->data == NULL) {
+	return NULL;
+    }
+
     if (array->data == NULL) {
 	err(160, caller, "array->data in dynamic array is NULL");
 	not_reached();

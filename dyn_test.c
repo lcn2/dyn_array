@@ -365,6 +365,10 @@ run_remaining_finding_regressions(void)
      * Valid helper / macro use should continue to work for in-range element access.
      */
     array = dyn_array_create(sizeof(int), 4, 4, true);
+    if (dyn_array_addr(array, int, 0) != dyn_array_beyond(array, int)) {
+	warn(__func__, "empty-array range regression before append");
+	ok = false;
+    }
     (void) dyn_array_append_set(array, values, 3);
     mid = dyn_array_addr(array, int, 1);
     value = dyn_array_value(array, int, 1);
@@ -388,6 +392,10 @@ run_remaining_finding_regressions(void)
      */
     (void) dyn_array_append_set(array, values, 3);
     dyn_array_free(array);
+    if (dyn_array_addr(array, int, 0) != NULL || dyn_array_beyond(array, int) != NULL) {
+	warn(__func__, "empty-array range regression after dyn_array_free()");
+	ok = false;
+    }
     if (array == NULL || array->data != NULL || array->elm_size != 0 || array->count != 0 ||
 	array->allocated != 0 || array->chunk != 0 || array->zeroize != false) {
 	warn(__func__, "dyn_array_free() ownership regression: array=%p data=%p elm_size=%zu zeroize=%s count=%jd allocated=%jd chunk=%jd",
