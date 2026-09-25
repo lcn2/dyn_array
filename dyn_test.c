@@ -354,8 +354,10 @@ static bool
 run_remaining_finding_regressions(void)
 {
     struct dyn_array *array = NULL;
+    const struct dyn_array *const_array = NULL;
     int values[3] = { 10, 20, 30 };
     int *mid = NULL;
+    int const *const_mid = NULL;
     int value = 0;
     bool ok = true;
 
@@ -370,11 +372,17 @@ run_remaining_finding_regressions(void)
 	ok = false;
     }
     (void) dyn_array_append_set(array, values, 3);
+    const_array = array;
     mid = dyn_array_addr(array, int, 1);
+    const_mid = dyn_array_addr(const_array, int, 1);
     value = dyn_array_value(array, int, 1);
-    if (mid == NULL || *mid != 20 || value != 20) {
-	warn(__func__, "macro/helper regression: mid/value mismatch: mid=%p *mid=%d value=%d",
-		       (void *)mid, (mid == NULL ? -1 : *mid), value);
+    if (mid == NULL || const_mid == NULL || *mid != 20 || *const_mid != 20 || value != 20 ||
+	dyn_array_value(const_array, int, 1) != 20) {
+	warn(__func__, "macro/helper regression: mid=%p const_mid=%p *mid=%d *const_mid=%d value=%d",
+		       (void *)mid, (void *)const_mid,
+		       (mid == NULL ? -1 : *mid),
+		       (const_mid == NULL ? -1 : *const_mid),
+		       value);
 	ok = false;
     }
 

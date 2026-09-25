@@ -98,9 +98,10 @@ struct dyn_array
 /*
  * public helper functions used by the convenience macros
  *
- * dyn_array_value_ref() returns the address of an in-use element.
- * dyn_array_addr_ref() returns the address of an in-use element or the
- * one-past-the-end address used for range iteration.
+ * dyn_array_value_ref() / dyn_array_value_c_ref() return the address of an
+ * in-use element.
+ * dyn_array_addr_ref() / dyn_array_addr_c_ref() return the address of an
+ * in-use element or the one-past-the-end address used for range iteration.
  *
  * These helpers can validate only generic dynamic-array invariants.
  * The caller must still ensure that:
@@ -113,6 +114,8 @@ struct dyn_array
  */
 extern void *dyn_array_value_ref(struct dyn_array *array, intmax_t index);
 extern void *dyn_array_addr_ref(struct dyn_array *array, intmax_t index);
+extern const void *dyn_array_value_c_ref(const struct dyn_array *array, intmax_t index);
+extern const void *dyn_array_addr_c_ref(const struct dyn_array *array, intmax_t index);
 
 
 /*
@@ -185,8 +188,14 @@ extern void *dyn_array_addr_ref(struct dyn_array *array, intmax_t index);
  *
  *	data_moved = dyn_array_push(array, value);
  */
-#define dyn_array_value(array, type, index) (*(type *)(dyn_array_value_ref((struct dyn_array *)(array), (intmax_t)(index))))
-#define dyn_array_addr(array, type, index) ((type *)(dyn_array_addr_ref((struct dyn_array *)(array), (intmax_t)(index))))
+#define dyn_array_value(array, type, index) _Generic((array), \
+    const struct dyn_array *: (*(type const *)(dyn_array_value_c_ref((const struct dyn_array *)(array), (intmax_t)(index)))), \
+    struct dyn_array *: (*(type *)(dyn_array_value_ref((struct dyn_array *)(array), (intmax_t)(index)))), \
+    default: (*(type *)(dyn_array_value_ref((struct dyn_array *)(array), (intmax_t)(index)))))
+#define dyn_array_addr(array, type, index) _Generic((array), \
+    const struct dyn_array *: ((type const *)(dyn_array_addr_c_ref((const struct dyn_array *)(array), (intmax_t)(index)))), \
+    struct dyn_array *: ((type *)(dyn_array_addr_ref((struct dyn_array *)(array), (intmax_t)(index)))), \
+    default: ((type *)(dyn_array_addr_ref((struct dyn_array *)(array), (intmax_t)(index)))))
 #define dyn_array_tell(array) (((struct dyn_array *)(array))->count)
 #define dyn_array_first(array, type) (dyn_array_addr(array, type, 0))
 #define dyn_array_beyond(array, type) (dyn_array_addr(array, type, dyn_array_tell(array)))

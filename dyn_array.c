@@ -74,7 +74,8 @@ static bool dyn_array_grow(struct dyn_array *array, intmax_t elms_to_allocate);
 static enum ptr_compare compare_addr(void *a, void *b);
 static enum move_case determine_move_case(void *first_alloc, void *last_alloc, void *first_add, void *last_add);
 static char const *move_case_name(enum move_case mv_case);
-static void *dyn_array_element_ref(struct dyn_array *array, intmax_t index, bool allow_one_past_end, char const *caller);
+static const void *dyn_array_element_ref(const struct dyn_array *array, intmax_t index,
+					 bool allow_one_past_end, char const *caller);
 
 
 /*
@@ -224,8 +225,8 @@ dyn_array_grow(struct dyn_array *array, intmax_t elms_to_allocate)
  *
  * NOTE: This function does not return on error.
  */
-static void *
-dyn_array_element_ref(struct dyn_array *array, intmax_t index, bool allow_one_past_end, char const *caller)
+static const void *
+dyn_array_element_ref(const struct dyn_array *array, intmax_t index, bool allow_one_past_end, char const *caller)
 {
     size_t offset;
 
@@ -310,7 +311,7 @@ dyn_array_element_ref(struct dyn_array *array, intmax_t index, bool allow_one_pa
 void *
 dyn_array_value_ref(struct dyn_array *array, intmax_t index)
 {
-    return dyn_array_element_ref(array, index, false, __func__);
+    return (void *)dyn_array_element_ref(array, index, false, __func__);
 }
 
 
@@ -324,6 +325,30 @@ dyn_array_value_ref(struct dyn_array *array, intmax_t index)
  */
 void *
 dyn_array_addr_ref(struct dyn_array *array, intmax_t index)
+{
+    return (void *)dyn_array_element_ref(array, index, true, __func__);
+}
+
+
+/*
+ * dyn_array_value_c_ref - return the address of an in-use element from a const array
+ *
+ * NOTE: This function does not return on error.
+ */
+const void *
+dyn_array_value_c_ref(const struct dyn_array *array, intmax_t index)
+{
+    return dyn_array_element_ref(array, index, false, __func__);
+}
+
+
+/*
+ * dyn_array_addr_c_ref - return the address of an in-use element or one-past-end from a const array
+ *
+ * NOTE: This function does not return on error.
+ */
+const void *
+dyn_array_addr_c_ref(const struct dyn_array *array, intmax_t index)
 {
     return dyn_array_element_ref(array, index, true, __func__);
 }
