@@ -453,14 +453,14 @@ run_remaining_finding_regressions(void)
      * Fatal firewall paths are checked in subprocesses so the main test can continue.
      */
 #if SIZE_MAX > INTMAX_MAX
-    ok = expect_fatal_exit("dyn_array_create elm_size overflow", 168, test_create_elm_size_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_create elm_size overflow", 86, test_create_elm_size_overflow) && ok;
 #endif
-    ok = expect_fatal_exit("dyn_array_create rounding overflow", 169, test_create_rounding_overflow) && ok;
-    ok = expect_fatal_exit("dyn_array_create guard chunk overflow", 171, test_create_guard_chunk_overflow) && ok;
-    ok = expect_fatal_exit("dyn_array_create byte count overflow", 172, test_create_allocation_size_overflow) && ok;
-    ok = expect_fatal_exit("dyn_array_seek SEEK_CUR overflow", 174, test_seek_cur_overflow) && ok;
-    ok = expect_fatal_exit("dyn_array_seek SEEK_END overflow", 175, test_seek_end_overflow) && ok;
-    ok = expect_fatal_exit("dyn_array_value bounds check", 165, test_macro_value_bounds) && ok;
+    ok = expect_fatal_exit("dyn_array_create rounding overflow", 88, test_create_rounding_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_create guard chunk overflow", 90, test_create_guard_chunk_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_create byte count overflow", 91, test_create_allocation_size_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_seek SEEK_CUR overflow", 141, test_seek_cur_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_seek SEEK_END overflow", 142, test_seek_end_overflow) && ok;
+    ok = expect_fatal_exit("dyn_array_value bounds check", 68, test_macro_value_bounds) && ok;
 
     return ok;
 }
