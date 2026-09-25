@@ -212,6 +212,11 @@ extern bool dyn_array_concat_array(struct dyn_array *array, struct dyn_array *ot
 extern bool dyn_array_seek(struct dyn_array *array, off_t offset, int whence);
 extern void dyn_array_clear(struct dyn_array *array);
 extern void dyn_array_free(struct dyn_array *array);
+/*
+ * dyn_array_destroy() frees a heap-allocated struct dyn_array created by
+ * dyn_array_create() and clears the caller's pointer.  Passing a non-NULL
+ * pointer variable whose value is already NULL is a documented no-op.
+ */
 extern void dyn_array_destroy(struct dyn_array **array_p);
 /**/
 extern void dyn_array_qsort(struct dyn_array *array, int (*compar)(const void *, const void *));

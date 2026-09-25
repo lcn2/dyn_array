@@ -1753,6 +1753,7 @@ dyn_array_free(struct dyn_array *array)
  * This helper is the safe companion to dyn_array_create().  It preserves the
  * long-documented dyn_array_free() contract while also clearing the caller's
  * pointer so repository code does not keep a dangling struct pointer around.
+ * If *array_p is already NULL, nothing is freed and the call is a documented no-op.
  *
  * NOTE: This function does not return on error.
  */

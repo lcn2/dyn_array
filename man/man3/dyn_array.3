@@ -259,6 +259,9 @@ It first calls
 and then frees the heap-allocated
 .B struct dyn_array
 itself, finally setting the caller's pointer to NULL to avoid leaving a dangling pointer behind.
+If the caller passes a non-NULL pointer variable whose value is already NULL,
+.B dyn_array_destroy()
+does nothing and returns.
 .SS The struct dyn_array
 .PP
 The

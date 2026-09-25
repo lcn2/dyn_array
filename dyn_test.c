@@ -411,6 +411,7 @@ run_remaining_finding_regressions(void)
 	warn(__func__, "dyn_array_destroy() did not clear caller pointer");
 	ok = false;
     }
+    dyn_array_destroy(&array);
 
     /*
      * Fatal firewall paths are checked in subprocesses so the main test can continue.
